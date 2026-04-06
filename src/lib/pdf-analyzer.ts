@@ -1,3 +1,5 @@
+import { supabaseAdmin } from '@/lib/supabase-server';
+
 // Standard Node.js text extraction with pdfjs-dist
 export interface AnalyzedContent {
   text: string;
@@ -11,18 +13,26 @@ export async function downloadAndExtractPDF(url: string): Promise<AnalyzedConten
   try {
     console.log(`[PDF Engine] Download URL: ${url}`);
     
-    // Server-safe fetch bypassing serverless caching
-    const response = await fetch(url, {
-      cache: "no-store"
-    });
+    // Convert public URL back to storage path
+    const pathMatch = url.match(/\/uploads\/(.+)$/);
+    if (!pathMatch) {
+      throw new Error("Invalid URL format: Cannot extract storage path");
+    }
+    const filePath = decodeURIComponent(pathMatch[1]);
+    
+    console.log(`[PDF Engine] Transporting internal storage object: ${filePath}`);
 
-    console.log(`[PDF Engine] Fetch Response Status: ${response.status}`);
+    // Download using Supabase Server-Side SDK bypassing fetch restrictions
+    const { data: blob, error } = await supabaseAdmin
+      .storage
+      .from("uploads")
+      .download(filePath);
 
-    if (!response.ok) {
-      throw new Error(`PDF fetch failed with status: ${response.status}`);
+    if (error || !blob) {
+      throw new Error(`Storage access denied: ${error?.message || 'Empty payload'}`);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
+    const arrayBuffer = await blob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
     console.log(`[PDF Engine] File Size buffer length: ${buffer.length} bytes`);
