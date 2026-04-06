@@ -23,23 +23,35 @@ export default function Dashboard() {
         fetch('/api/dashboard/live')
       ]);
 
-      // 2. Parse responses
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (tasksRes.ok) setTasks(await tasksRes.json());
-      if (progressRes.ok) setProgressData(await progressRes.json());
+      // 2. Parse responses safely — only parse JSON when response is OK
+      if (statsRes.ok) {
+        const statsJson = await statsRes.json();
+        if (statsJson.success && statsJson.data) setStats(statsJson.data);
+      }
+      if (tasksRes.ok) {
+        const tasksJson = await tasksRes.json();
+        if (tasksJson.success && tasksJson.data) setTasks(tasksJson.data);
+      }
+      if (progressRes.ok) {
+        const progressJson = await progressRes.json();
+        if (progressJson.success && progressJson.data) setProgressData(progressJson.data);
+      }
       if (liveRes.ok) {
-        const liveData = await liveRes.json();
-        setSuggestions(liveData.suggestions || []);
-        setDeadlines(liveData.deadlines || []);
-        
-        // Handle AI-generated tasks
-        if (liveData.newTask) {
-          setTasks(prev => {
-            if (!prev.find(t => t.title === liveData.newTask.title)) {
-              return [...prev, liveData.newTask];
-            }
-            return prev;
-          });
+        const liveJson = await liveRes.json();
+        if (liveJson.success && liveJson.data) {
+          const liveData = liveJson.data;
+          setSuggestions(liveData.suggestions || []);
+          setDeadlines(liveData.deadlines || []);
+          
+          // Handle AI-generated tasks
+          if (liveData.newTask) {
+            setTasks(prev => {
+              if (!prev.find(t => t.title === liveData.newTask.title)) {
+                return [...prev, liveData.newTask];
+              }
+              return prev;
+            });
+          }
         }
       }
     } catch (e) {
@@ -69,8 +81,11 @@ export default function Dashboard() {
       });
 
       if (res.ok) {
-        // 3. Immediately refresh stats and progress data
-        fetchDashboardData();
+        const result = await res.json();
+        if (result.success) {
+          // 3. Immediately refresh stats and progress data
+          fetchDashboardData();
+        }
       }
     } catch (e) {
       console.error("Error updating task status:", e);

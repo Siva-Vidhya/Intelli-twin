@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -16,9 +15,9 @@ export async function GET() {
       date: f.created_at ? new Date(f.created_at).toLocaleString() : 'N/A',
     }));
 
-    return NextResponse.json({ success: true, files: formattedFiles });
+    return Response.json({ success: true, data: { files: formattedFiles } });
   } catch (error: any) {
     console.error('Files GET Error:', error.message);
-    return NextResponse.json({ error: 'Failed to fetch files', details: error.message }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

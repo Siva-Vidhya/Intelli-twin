@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server';
-
 export async function POST(req: Request) {
   try {
     const { topics, availableTime } = await req.json();
@@ -33,8 +31,9 @@ export async function POST(req: Request) {
       ]
     };
 
-    return NextResponse.json(generatedPlan);
-  } catch {
-    return NextResponse.json({ error: "Failed to generate study plan." }, { status: 500 });
+    return Response.json({ success: true, data: generatedPlan });
+  } catch (error: any) {
+    console.error('[API/AI/Plan] Error:', error.message);
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

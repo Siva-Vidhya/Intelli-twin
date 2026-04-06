@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
@@ -15,9 +14,9 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true });
+    return Response.json({ success: true, data: { id } });
   } catch (error: any) {
     console.error('Planner Update Error:', error.message);
-    return NextResponse.json({ error: 'Failed to update task' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

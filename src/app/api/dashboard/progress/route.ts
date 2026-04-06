@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -32,9 +31,9 @@ export async function GET() {
       { name: 'Sun', completed: daysMap['Sunday'] || 4 },
     ];
 
-    return NextResponse.json(chartData);
+    return Response.json({ success: true, data: chartData });
   } catch (error: any) {
     console.error('Progress GET Error:', error.message);
-    return NextResponse.json({ error: 'Failed to fetch progress data' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
@@ -28,9 +27,9 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
+    return Response.json({ success: true, data: { timestamp: new Date().toISOString() } });
   } catch (error: any) {
     console.error('Settings update Error:', error.message);
-    return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

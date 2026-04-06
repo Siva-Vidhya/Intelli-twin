@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -24,16 +23,19 @@ export async function GET() {
     const totalPossibleTasks = allTasks.length || 1;
     const mastery = Math.min(100, Math.round((completedTasksCount / totalPossibleTasks) * 100) + 50);
 
-    return NextResponse.json({
-      streak,
-      completed: completedTasksCount,
-      hours: totalHours.toFixed(1),
-      mastery,
-      uploadCount: files?.length || 0,
-      lastActive: (settings as any)?.last_active,
+    return Response.json({
+      success: true,
+      data: {
+        streak,
+        completed: completedTasksCount,
+        hours: totalHours.toFixed(1),
+        mastery,
+        uploadCount: files?.length || 0,
+        lastActive: (settings as any)?.last_active,
+      }
     });
   } catch (error: any) {
     console.error('Stats API Error:', error.message);
-    return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

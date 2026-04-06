@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -13,38 +12,41 @@ export async function GET() {
 
     const s = settings || {};
 
-    return NextResponse.json({
-      profile: {
-        name: s.name || 'Alex Student',
-        email: s.email || 'alex@intellitwin.ai',
-        studyGoal: s.study_goal || 'Master Computer Science fundamentals',
-        dailyHours: s.daily_hours || 4,
-        learningPace: s.learning_pace || 'Medium',
-      },
-      notifications: s.notifications_json || {
-        studyReminders: true, deadlineAlerts: true, aiSuggestions: true,
-        progressReports: false, weeklyDigest: true,
-      },
-      ai: {
-        difficultyLevel: s.difficulty_level || 'Intermediate',
-        focusSubjects: s.focus_subjects || ['Data Structures', 'Algorithms', 'OS'],
-        ...(s.ai_json || { studyStyle: 'Mixed', enableAutoSchedule: true, enableAdaptiveLearning: true }),
-      },
-      appearance: {
-        theme: s.theme || 'dark',
-        accentColor: s.accent_color || '#00f2fe',
-        ...(s.appearance_json || { fontSize: 'medium', compactMode: false }),
-      },
-      stats: {
-        totalStudySessions: 147,
-        knowledgeItems: 23,
-        plannerTasks: 41,
-        lastActive: s.last_active || new Date().toISOString(),
-      },
+    return Response.json({
+      success: true,
+      data: {
+        profile: {
+          name: s.name || 'Alex Student',
+          email: s.email || 'alex@intellitwin.ai',
+          studyGoal: s.study_goal || 'Master Computer Science fundamentals',
+          dailyHours: s.daily_hours || 4,
+          learningPace: s.learning_pace || 'Medium',
+        },
+        notifications: s.notifications_json || {
+          studyReminders: true, deadlineAlerts: true, aiSuggestions: true,
+          progressReports: false, weeklyDigest: true,
+        },
+        ai: {
+          difficultyLevel: s.difficulty_level || 'Intermediate',
+          focusSubjects: s.focus_subjects || ['Data Structures', 'Algorithms', 'OS'],
+          ...(s.ai_json || { studyStyle: 'Mixed', enableAutoSchedule: true, enableAdaptiveLearning: true }),
+        },
+        appearance: {
+          theme: s.theme || 'dark',
+          accentColor: s.accent_color || '#00f2fe',
+          ...(s.appearance_json || { fontSize: 'medium', compactMode: false }),
+        },
+        stats: {
+          totalStudySessions: 147,
+          knowledgeItems: 23,
+          plannerTasks: 41,
+          lastActive: s.last_active || new Date().toISOString(),
+        },
+      }
     });
   } catch (error: any) {
     console.error('Settings GET Error:', error.message);
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
@@ -75,9 +77,9 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
+    return Response.json({ success: true, data: { timestamp: new Date().toISOString() } });
   } catch (error: any) {
     console.error('Settings POST Error:', error.message);
-    return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

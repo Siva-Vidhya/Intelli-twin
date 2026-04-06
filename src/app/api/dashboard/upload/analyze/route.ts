@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+// Local NLP Analysis Pipeline
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -233,22 +233,25 @@ export async function POST(request: Request) {
       ],
     }));
 
-    return NextResponse.json({
-      summary,
-      topics,
-      modules,
-      tasks,
-      qaSession,
-      studyPlan,
-      difficulty: modules.length >= 4 ? 'Advanced' : 'Intermediate',
-      estimatedTime: `${modules.length * 2} Hours`,
-      priority: 'High',
-      extractedText: rawText.slice(0, 8000), // stored in DB for reference
+    return Response.json({
+      success: true,
+      data: {
+        summary,
+        topics,
+        modules,
+        tasks,
+        qaSession,
+        studyPlan,
+        difficulty: modules.length >= 4 ? 'Advanced' : 'Intermediate',
+        estimatedTime: `${modules.length * 2} Hours`,
+        priority: 'High',
+        extractedText: rawText.slice(0, 8000), // stored in DB for reference
+      }
     });
   } catch (error: unknown) {
     console.error('Analyze route error:', error instanceof Error ? error.message : String(error));
-    return NextResponse.json(
-      { error: 'Failed to analyze file', details: error instanceof Error ? error.message : 'Unknown error' },
+    return Response.json(
+      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 const suggestionsPool = [
@@ -43,13 +42,16 @@ export async function GET() {
       completed: false,
     } : null;
 
-    return NextResponse.json({
-      suggestions: shuffledSugs,
-      deadlines: deadlinesWithColors,
-      newTask: dynamicTask,
+    return Response.json({
+      success: true,
+      data: {
+        suggestions: shuffledSugs,
+        deadlines: deadlinesWithColors,
+        newTask: dynamicTask,
+      }
     });
   } catch (error: any) {
     console.error('Dashboard Live Error:', error.message);
-    return NextResponse.json({ error: 'Failed to fetch AI updates' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

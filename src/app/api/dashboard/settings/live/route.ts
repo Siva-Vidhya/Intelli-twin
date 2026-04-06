@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -13,14 +12,18 @@ export async function GET() {
 
     const s: any = settings || {};
 
-    return NextResponse.json({
-      theme: s.theme || 'dark',
-      accentColor: s.accent_color || '#00f2fe',
-      notifications: s.notifications_json || {},
-      ai: s.ai_json || {},
-      lastUpdated: new Date().toLocaleTimeString(),
+    return Response.json({
+      success: true,
+      data: {
+        theme: s.theme || 'dark',
+        accentColor: s.accent_color || '#00f2fe',
+        notifications: s.notifications_json || {},
+        ai: s.ai_json || {},
+        lastUpdated: new Date().toLocaleTimeString(),
+      }
     });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Failed to fetch live settings' }, { status: 500 });
+    console.error('Settings Live Error:', error.message);
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -69,16 +68,19 @@ export async function GET() {
     const suggestions = suggestionsPool.slice(0, 2);
     if (completedTasks > 2) suggestions[0] = 'Great job! Your study twin has logged 3 sessions today.';
 
-    return NextResponse.json({
-      tasks: allTasks.map((t: any) => ({ ...t, completed: Boolean(t.completed) })),
-      stats: { dailyPercentage, weeklyCompletion, studyHours: totalHours.toFixed(1), totalTasks, completedTasks },
-      suggestions,
-      notifications,
-      latestAnalysis,
-      lastUpdated: new Date().toLocaleTimeString(),
+    return Response.json({
+      success: true,
+      data: {
+        tasks: allTasks.map((t: any) => ({ ...t, completed: Boolean(t.completed) })),
+        stats: { dailyPercentage, weeklyCompletion, studyHours: totalHours.toFixed(1), totalTasks, completedTasks },
+        suggestions,
+        notifications,
+        latestAnalysis,
+        lastUpdated: new Date().toLocaleTimeString(),
+      }
     });
   } catch (error: any) {
     console.error('Planner Live Error:', error.message);
-    return NextResponse.json({ error: 'Failed to fetch planner data' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

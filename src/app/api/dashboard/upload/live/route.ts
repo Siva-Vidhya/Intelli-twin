@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -32,24 +31,24 @@ export async function GET() {
       f.created_at && new Date(f.created_at) > twoHoursAgo
     ).length;
 
-    return NextResponse.json({
+    return Response.json({
       success: true,
-      files: allFiles.map((f: any) => ({
-        ...f,
-        date: f.created_at ? new Date(f.created_at).toLocaleString() : (f.date || 'Unknown'),
-        analysis: f.analysis_json ?? null,
-      })),
-      stats: { totalFiles, storageUsed: totalStorageGB, filesToday, recentUploads },
-      lastUpdated: new Date().toLocaleTimeString(),
+      data: {
+        files: allFiles.map((f: any) => ({
+          ...f,
+          date: f.created_at ? new Date(f.created_at).toLocaleString() : (f.date || 'Unknown'),
+          analysis: f.analysis_json ?? null,
+        })),
+        stats: { totalFiles, storageUsed: totalStorageGB, filesToday, recentUploads },
+        lastUpdated: new Date().toLocaleTimeString(),
+      }
     });
   } catch (error: any) {
     console.error('Upload Live Error:', error.message);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch upload metadata',
+    return Response.json({ success: false, error: error.message,
       files: [],
       stats: { totalFiles: 0, storageUsed: '0.00 GB', filesToday: 0, recentUploads: 0 },
       lastUpdated: new Date().toLocaleTimeString(),
-    });
+    }, { status: 500 });
   }
 }

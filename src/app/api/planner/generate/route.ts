@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '@/lib/supabase';
 
@@ -45,9 +44,9 @@ export async function POST(req: Request) {
 
     const generatedPlan = JSON.parse(jsonMatch[0]);
 
-    return NextResponse.json({ success: true, ...generatedPlan });
+    return Response.json({ success: true, ...generatedPlan });
   } catch (error: any) {
     console.error('Generate API Error:', error);
-    return NextResponse.json({ error: 'Generation failed', details: error.message }, { status: 500 });
+    return Response.json({ success: false, error: 'Generation failed', message: error.message }, { status: 500 });
   }
 }

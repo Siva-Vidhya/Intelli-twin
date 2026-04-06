@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
@@ -20,17 +19,17 @@ export async function GET() {
         : 'bg-emerald-500/10',
     }));
 
-    return NextResponse.json(tasksWithBg);
+    return Response.json({ success: true, data: tasksWithBg });
   } catch (error: any) {
     console.error('Tasks GET Error:', error.message);
-    return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const { id, completed } = await request.json();
-    if (!id) return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
+    if (!id) return Response.json({ success: false, error: 'Task ID is required' }, { status: 400 });
 
     const { error } = await supabase
       .from('tasks')
@@ -39,9 +38,9 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
+    return Response.json({ success: true, data: { timestamp: new Date().toISOString() } });
   } catch (error: any) {
     console.error('Tasks POST Error:', error.message);
-    return NextResponse.json({ error: 'Failed to update task' }, { status: 500 });
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
