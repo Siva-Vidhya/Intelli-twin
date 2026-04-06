@@ -22,9 +22,9 @@ export async function POST(req: Request) {
     }
 
     // --- 2. STORAGE TRANSPORT ---
-    const fileName = file.name;
-    const fileExt = fileName.split('.').pop();
-    const filePath = `documents/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+    const fileExt = file.name.split('.').pop();
+    const filePath = `documents/${fileName}`;
     
     console.log(`[API/Upload] Transporting binary stream: ${filePath}`);
     const arrayBuffer = await file.arrayBuffer();
@@ -44,11 +44,16 @@ export async function POST(req: Request) {
       console.warn('[API/Upload] Storage Hub Error. Intelligence running in fallback mode.');
       publicUrl = `fallback://${fileName}`;
     } else {
-      const { data } = supabaseAdmin
+      const urlData = supabaseAdmin
         .storage
         .from('uploads')
         .getPublicUrl(filePath);
-      publicUrl = data.publicUrl;
+      
+      publicUrl = urlData.data.publicUrl;
+      
+      if (!publicUrl.toLowerCase().endsWith(".pdf")) {
+        throw new Error("Invalid file URL: File must be a valid PDF document with a proper extension.");
+      }
     }
 
     // --- 4. ATOMIC METADATA SAVE ---
