@@ -1,13 +1,13 @@
 import { supabaseAdmin } from "@/lib/supabase-server";
 
 /**
- * Phase 6: Live Planner State API
+ * Phase 6: Live Planner State API (Guaranteed Linkage)
  * Returns the latest upload status + all associated study data.
- * Frontend polls this every 3 seconds until status === "completed" or "failed".
+ * Filtering is strictly by file_id to prevent data leakage.
  */
 export async function GET() {
   try {
-    // Get the most recent upload
+    // 1. Get the most recent upload (document context)
     const { data: uploads, error: uploadErr } = await supabaseAdmin
       .from("uploads")
       .select("*")
@@ -24,16 +24,18 @@ export async function GET() {
     let qna: any[] = [];
     let tasks: any[] = [];
 
-    // Only hydrate sub-tables when analysis is done
-    if (fileId && status === "completed") {
+    // 2. Fetch linked data only if we have a file context
+    if (fileId) {
+      // Parallel fetch for modules and LINKED planner tasks
       const [modulesRes, tasksRes] = await Promise.all([
         supabaseAdmin.from("modules").select("*").eq("file_id", fileId).order("created_at"),
-        supabaseAdmin.from("planner").select("*").order("created_at")
+        supabaseAdmin.from("planner").select("*").eq("file_id", fileId).order("created_at")
       ]);
 
       modules = modulesRes.data || [];
       tasks = tasksRes.data || [];
 
+      // 3. Fetch Q&A for these modules
       if (modules.length > 0) {
         const moduleIds = modules.map((m: any) => m.id);
         const { data: qnaData } = await supabaseAdmin
@@ -43,11 +45,6 @@ export async function GET() {
           .order("created_at");
         qna = qnaData || [];
       }
-    } else if (fileId && status === "processing") {
-      // While processing, return tasks that may already exist
-      const { data: existingTasks } = await supabaseAdmin
-        .from("planner").select("*").order("created_at");
-      tasks = existingTasks || [];
     }
 
     return Response.json({

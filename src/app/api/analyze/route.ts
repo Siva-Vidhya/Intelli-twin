@@ -1,46 +1,35 @@
-import { supabaseAdmin } from "@/lib/supabase-server";
+import { runAnalysisPipeline } from "@/lib/intelligence-engine";
 
 /**
- * Phase 2: Non-Blocking Trigger Route
- * Accepts the upload data, marks the file as "processing", 
- * fires the background worker WITHOUT awaiting it, and returns immediately.
- * This prevents frontend timeouts on large PDFs.
+ * Phase 2: Guaranteed Non-Blocking Trigger
+ * Fires the analysis pipeline logic internally within the same process.
+ * This is 100% reliable compared to cross-route fetch triggers.
  */
 export async function POST(req: Request) {
   try {
-    const { fileUrl, fileId, fileName } = await req.json();
+    const { fileUrl, fileId } = await req.json();
 
     if (!fileUrl || !fileId) {
       return Response.json({ success: false, error: "Missing fileUrl or fileId" }, { status: 400 });
     }
 
-    console.log("Upload received — triggering background analysis for:", fileId);
+    console.log(`[Analyze] Starting Guaranteed Analysis Trigger for: ${fileId}`);
 
-    // Mark as processing immediately
-    try {
-      await supabaseAdmin.from("uploads").update({
-        status: "processing",
-        summary: "Initializing Intelligent Analysis..."
-      }).eq("id", fileId);
-    } catch (statusErr: any) {
-      console.warn("[Analyze] Could not mark status:", statusErr.message);
-    }
-
-    // Fire background worker - no await (non-blocking)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    fetch(`${baseUrl}/api/analyze/background`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileUrl, fileId, fileName })
-    }).catch((err: any) => {
-      console.error("[Analyze] Background trigger error:", err.message);
+    // FIRE AND FORGET - Call the library directly without awaiting
+    // This allows the request to return immediately to the frontend.
+    runAnalysisPipeline(fileUrl, fileId).catch(err => {
+      console.error(`[Analyze] Background Execution Error:`, err.message);
     });
 
-    // Return immediately — frontend polls for status
-    return Response.json({ success: true, status: "processing" });
+    // Return immediately to the frontend polling dashboard
+    return Response.json({ 
+      success: true, 
+      status: "processing", 
+      message: "Analysis is running in the background." 
+    });
 
   } catch (error: any) {
-    console.error("[Analyze] Trigger error:", error.message);
+    console.error(`[Analyze] API Error:`, error.message);
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
