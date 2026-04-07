@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabase-server';
-import { downloadAndExtractPDF } from './pdf-analyzer';
+import { parsePDF } from './pdf-parser';
 import { analyzeText, AIAnalysis } from './ai';
 
 export interface PipelineResult {
@@ -35,9 +35,19 @@ export async function runIntelligencePipeline(fileId: string, fileUrl: string): 
     // --- STEP 1: PDF EXTRACTION ---
     let parsed: { text: string };
     try {
-      console.log(`[ENGINE] Step 1: PDF Extraction [ID: ${fileId}]`);
-      const extracted = await downloadAndExtractPDF(fileUrl);
-      parsed = { text: extracted.text };
+      console.log(`[ENGINE] Step 1: Downloading & Parsing PDF [ID: ${fileId}]`);
+      
+      // Direct download from Supabase as per Step 2
+      const pathMatch = fileUrl.match(/\/uploads\/(.+)$/);
+      if (!pathMatch) throw new Error("Invalid URL format");
+      const filePath = decodeURIComponent(pathMatch[1]);
+      
+      const { data: blob, error } = await supabaseAdmin.storage.from("uploads").download(filePath);
+      if (error || !blob) throw new Error(`Download failed: ${error?.message || 'Empty blob'}`);
+      
+      const buffer = Buffer.from(await blob.arrayBuffer());
+      const extractedText = await parsePDF(buffer);
+      parsed = { text: extractedText };
       
       if (parsed.text.startsWith('[Fallback Mode')) {
         result.status.parse = 'fallback';

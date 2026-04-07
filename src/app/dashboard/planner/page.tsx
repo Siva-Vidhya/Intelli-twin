@@ -56,54 +56,41 @@ export default function StudyPlanner() {
   const [addingTask, setAddingTask] = useState(false);
   const [latestUpload, setLatestUpload] = useState<any>(null);
 
-  const fetchPlannerData = useCallback(async () => {
-    console.log("Fetching Planner Data...");
+  const fetchPlannerData = useCallback(async (): Promise<string> => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/planner/live');
+      const res = await fetch('/api/planner/live', { cache: 'no-store' });
       if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
       const result = await res.json().catch(() => null);
 
-      if (!result) {
+      if (!result || !result.success || !result.data) {
         console.warn("Planner API returned invalid response");
-        setIsSyncing(false);
-        return;
+        return 'error';
       }
 
-      if (!result.success || !result.data) throw new Error(result.message || 'Failed to load planner data');
-      
       const data = result.data;
       const allTasks = data.tasks || [];
       setPlannerTasks(allTasks);
       setLatestUpload(data.latestAnalysis || null);
       setModules(data.modules || []);
       setQna(data.qna || []);
+      setLastUpdated(new Date().toLocaleTimeString());
 
-      // Compute Stats from standardized data
-      if (data.stats) {
-        setStats(data.stats);
-      } else {
-        const total = allTasks.length;
-        const completed = allTasks.filter((t: any) => t.completed || t.status === 'Completed').length;
-        setStats({
-          totalTasks: total,
-          completedTasks: completed,
-          dailyPercentage: total ? Math.round((completed / total) * 100) : 0,
-          weeklyCompletion: total ? Math.round((completed / total) * 85) : 0,
-          studyHours: Math.round(total * 0.8)
-        });
-      }
+      const total = allTasks.length;
+      const completed = allTasks.filter((t: any) => t.status === 'Completed').length;
+      setStats({
+        totalTasks: total,
+        completedTasks: completed,
+        dailyPercentage: total ? Math.round((completed / total) * 100) : 0,
+        weeklyCompletion: total ? Math.round((completed / total) * 85) : 0,
+        studyHours: Math.round(total * 0.8)
+      });
 
-      setLastUpdated(data.lastUpdated || new Date().toLocaleTimeString());
+      // Return status so the polling loop knows when to stop
+      return result.status || 'idle';
     } catch (error) {
       console.error('[Study Planner]: fetchPlannerData error', error);
-      setPlannerTasks([]);
-      setModules([]);
-      setQna([]);
-      setStats(null);
-      setLatestUpload(null);
-      // Prevent infinite UI error loop
-      return;
+      return 'error';
     } finally {
       setIsSyncing(false);
     }
@@ -111,24 +98,41 @@ export default function StudyPlanner() {
 
   useEffect(() => {
     setHasMounted(true);
+
+    // Initial fetch
     fetchPlannerData();
 
-    const supabase = getSupabasePublic();
-    let refreshTimeout: any;
+    // 3-second polling interval — stops when analysis completes or fails
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let isPollingActive = true;
 
-    const safeRefresh = () => {
-      clearTimeout(refreshTimeout);
-      refreshTimeout = setTimeout(fetchPlannerData, 800);
+    const startPolling = () => {
+      pollInterval = setInterval(async () => {
+        if (!isPollingActive) return;
+        const status = await fetchPlannerData();
+        if (status === 'completed' || status === 'failed') {
+          console.log('[Planner] Polling complete. Status:', status);
+          if (pollInterval) clearInterval(pollInterval);
+        }
+      }, 3000);
     };
 
+    startPolling();
+
+    // Realtime subscriptions as a secondary refresh mechanism
+    const supabase = getSupabasePublic();
     const channel = supabase
-      .channel('planner_realtime_v3')
-      .on('postgres_changes', { event: '*', table: 'planner', schema: 'public' }, safeRefresh)
-      .on('postgres_changes', { event: '*', table: 'uploads', schema: 'public' }, safeRefresh)
-      .on('postgres_changes', { event: '*', table: 'modules', schema: 'public' }, safeRefresh)
+      .channel('planner_realtime_v4')
+      .on('postgres_changes', { event: '*', table: 'uploads', schema: 'public' }, () => fetchPlannerData())
+      .on('postgres_changes', { event: '*', table: 'planner', schema: 'public' }, () => fetchPlannerData())
+      .on('postgres_changes', { event: '*', table: 'modules', schema: 'public' }, () => fetchPlannerData())
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      isPollingActive = false;
+      if (pollInterval) clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+    };
   }, [fetchPlannerData]);
 
   // Hard Reset Planner When Upload Changes
@@ -201,10 +205,24 @@ export default function StudyPlanner() {
 
   if (!hasMounted) return null; // Hydration defense
 
-  if (!plannerTasks && !modules && !qna) {
+  const isEmpty = plannerTasks.length === 0 && modules.length === 0 && qna.length === 0;
+
+  if (isEmpty && !isSyncing) {
     return (
-      <div className="text-center py-20 text-gray-500">
-        No planner data available yet. Upload documents first.
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-in fade-in duration-700">
+        <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
+          <CalendarIcon className="w-10 h-10 text-gray-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">No planner data yet</h2>
+        <p className="text-gray-500 max-w-sm mb-8">
+          Upload a document in the Knowledge Base to generate your AI-powered study plan, modules, and Q&A.
+        </p>
+        <button 
+          onClick={() => window.location.href = '/dashboard/upload'}
+          className="px-8 py-3 bg-[#8a2be2] text-white rounded-xl font-bold hover:scale-105 transition-all shadow-[0_0_20px_rgba(138,43,226,0.2)]"
+        >
+          Go to Upload
+        </button>
       </div>
     );
   }

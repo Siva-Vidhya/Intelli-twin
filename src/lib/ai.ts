@@ -14,125 +14,138 @@ export interface AIAnalysis {
 }
 
 /**
- * Splits text into chunks of roughly 'size' characters.
+ * Safe JSON extractor — strips markdown fences and extracts valid JSON.
  */
-function splitIntoChunks(text: string, size: number): string[] {
-  const chunks = [];
-  for (let i = 0; i < text.length; i += size) {
-    chunks.push(text.substring(i, i + size));
+function safeParseJSON(raw: string): any {
+  // Strip markdown code fences if present
+  let clean = raw.trim();
+  if (clean.startsWith("```")) {
+    clean = clean.replace(/^```[a-z]*\n?/i, "").replace(/```$/,"").trim();
   }
-  return chunks;
+  // Find the first { or [ and the last } or ]
+  const firstBrace = Math.min(
+    clean.indexOf("{") === -1 ? Infinity : clean.indexOf("{"),
+    clean.indexOf("[") === -1 ? Infinity : clean.indexOf("[")
+  );
+  const lastBrace = Math.max(clean.lastIndexOf("}"), clean.lastIndexOf("]"));
+  if (firstBrace === Infinity || lastBrace === -1) throw new Error("No JSON found in AI response");
+  return JSON.parse(clean.slice(firstBrace, lastBrace + 1));
 }
 
-/**
- * Helper with exponential backoff retry
- */
-async function generateWithRetry(model: any, prompt: string, retries = 2): Promise<any> {
-    let lastError = null;
-    for (let i = 0; i <= retries; i++) {
-        try {
-            const result = await model.generateContent(prompt);
-            return JSON.parse(result.response.text());
-        } catch (error: any) {
-            console.warn(`[AI Engine] Attempt ${i + 1} failed.`, error.message);
-            lastError = error;
-            if (i < retries) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i))); // 1s, 2s Exponential backoff
-            }
-        }
-    }
-    throw lastError;
-}
+export async function analyzeText(rawText: string): Promise<AIAnalysis> {
+  // Truncate to prevent token overflow
+  const text = rawText.length > 9000 ? rawText.slice(0, 9000) : rawText;
 
-/**
- * Advanced AI Analysis: 
- * Processes text in 3000-character chunks and merges results to prevent token overflow.
- */
-export async function analyzeText(text: string): Promise<AIAnalysis> {
-  const model = genAI.getGenerativeModel({ 
+  const model = genAI.getGenerativeModel({
     model: "gemini-1.5-flash",
-    generationConfig: { responseMimeType: "application/json" }
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.3,
+    }
   });
 
-  const chunks = splitIntoChunks(text, 3000);
-  console.log(`[AI Engine] Document split into ${chunks.length} chunks (3k chars/ea).`);
+  const prompt = `You are an expert academic study planner AI. Analyze the following document text and return ONLY a valid JSON object (no markdown, no explanation).
 
-  const fullAnalysis: AIAnalysis = {
-    summary: "",
-    modules: []
-  };
+Document text:
+"""
+${text.replace(/\\/g, "\\\\").replace(/"""/g, "'''")}
+"""
 
-  try {
-    // Process the first chunk for the summary and initial architecture
-    const firstChunkPrompt = `
-      As an expert academic AI, analyze this first segment of study material.
-      Return a JSON object containing a summary and the first set of modules.
-      
-      Segment: "${chunks[0].replace(/"/g, "'")}"
-      
-      JSON Schema:
+Return this exact JSON structure:
+{
+  "summary": "A clear 2-3 sentence summary of the document",
+  "modules": [
+    {
+      "name": "Module name",
+      "topics": ["topic1", "topic2"],
+      "difficulty": "Easy|Medium|Hard",
+      "qna": [
+        { "question": "A study question?", "answer": "The answer." }
+      ],
+      "planner_tasks": [
+        { "task": "Task description", "topic": "Topic name", "priority": "High|Medium|Low" }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Return 2-4 modules minimum
+- Return 2-3 Q&A per module
+- Return 1-2 tasks per module
+- Never return empty arrays
+- Return ONLY the JSON object, nothing else`;
+
+  let lastError: any;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`[AI Engine] Attempt ${attempt}/3...`);
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      console.log("[AI Engine] Raw response length:", responseText?.length || 0);
+
+      const data = safeParseJSON(responseText);
+
+      // Validate structure
+      if (!data.summary || !Array.isArray(data.modules) || data.modules.length === 0) {
+        throw new Error("AI response missing required fields: summary or modules");
+      }
+
+      // Ensure each module has required arrays
+      const modules = data.modules.map((mod: any) => ({
+        name: mod.name || "Study Module",
+        topics: Array.isArray(mod.topics) ? mod.topics : ["General Review"],
+        difficulty: mod.difficulty || "Medium",
+        qna: Array.isArray(mod.qna) && mod.qna.length > 0
+          ? mod.qna
+          : [{ question: "What are the key concepts?", answer: "Review the module content." }],
+        planner_tasks: Array.isArray(mod.planner_tasks) && mod.planner_tasks.length > 0
+          ? mod.planner_tasks
+          : [{ task: `Study ${mod.name || "this module"}`, topic: mod.name || "General", priority: "Medium" }]
+      }));
+
+      console.log(`[AI Engine] Success — ${modules.length} modules extracted.`);
+      return { summary: data.summary, modules };
+
+    } catch (err: any) {
+      console.warn(`[AI Engine] Attempt ${attempt} failed:`, err.message);
+      lastError = err;
+      // Small delay before retry
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+  }
+
+  // All attempts failed — generate a rule-based fallback
+  console.warn("[AI Engine] All attempts failed. Generating fallback analysis.");
+  const snippet = text.slice(0, 400).replace(/\n/g, " ").trim();
+  return {
+    summary: `This document covers: ${snippet}... [Analyzed via fallback mode]`,
+    modules: [
       {
-        "summary": "High-level summary of the knowledge content",
-        "modules": [
-          {
-            "name": "Module Title",
-            "topics": ["T1", "T2"],
-            "difficulty": "Easy/Medium/Hard",
-            "qna": [{ "question": "Q", "answer": "A" }],
-            "planner_tasks": [{ "task": "T", "topic": "C", "priority": "High" }]
-          }
+        name: "Core Concepts",
+        topics: ["Main Ideas", "Key Themes"],
+        difficulty: "Medium",
+        qna: [
+          { question: "What is this document about?", answer: "Please review the uploaded PDF for detailed content." },
+          { question: "What are the main topics?", answer: "The document covers several academic topics outlined in the text." }
+        ],
+        planner_tasks: [
+          { task: "Read and annotate the document", topic: "Core Concepts", priority: "High" },
+          { task: "Summarize key points", topic: "Core Concepts", priority: "Medium" }
+        ]
+      },
+      {
+        name: "Review & Practice",
+        topics: ["Self-Assessment", "Practice Questions"],
+        difficulty: "Easy",
+        qna: [
+          { question: "How should I study this material?", answer: "Break the document into sections and review each systematically." }
+        ],
+        planner_tasks: [
+          { task: "Create a mind map of the content", topic: "Review", priority: "Medium" }
         ]
       }
-    `;
-
-    const chunkData = await generateWithRetry(model, firstChunkPrompt);
-    fullAnalysis.summary = chunkData.summary || "Summary generated without specifics.";
-    fullAnalysis.modules = chunkData.modules || [];
-
-    // If there are more chunks, enrich the modules with subsequent segments (Process up to 4 more chunks to stay within reasonable time)
-    const extraChunks = chunks.slice(1, 5); 
-    for (const [index, chunk] of extraChunks.entries()) {
-      console.log(`[AI Engine] Enriching study plan with chunk ${index + 2}/${chunks.length}...`);
-      
-      const enrichmentPrompt = `
-        Continue the analysis for the following segment of the same document.
-        Return ONLY additional JSON modules that weren't captured in the previous segment.
-        
-        Segment: "${chunk.replace(/"/g, "'")}"
-        
-        JSON Schema:
-        {
-          "modules": [
-             { "name": "Next Module", "topics": ["T1"], "difficulty": "Medium", "qna": [], "planner_tasks": [] }
-          ]
-        }
-      `;
-
-      try {
-        const enrichData = await generateWithRetry(model, enrichmentPrompt, 1); // Only 1 retry for enrichments
-        if (enrichData && enrichData.modules) {
-          fullAnalysis.modules = [...fullAnalysis.modules, ...enrichData.modules];
-        }
-      } catch (err) {
-        console.warn(`[AI Engine] Chunk ${index + 2} enrichment failed, skipping segment.`, err);
-      }
-    }
-
-    return fullAnalysis;
-
-  } catch (error: any) {
-    console.error("[AI Engine] Critical Intelligence Failure:", error.message);
-    
-    // Recovery: Attempt to generate a basic summary and introductory module if possible
-    return {
-      summary: text.substring(0, 500) + "... [Generated via Recovery Mode]",
-      modules: [{
-        name: "Introduction & Overview",
-        topics: ["Core Concepts"],
-        difficulty: "Easy",
-        qna: [{ question: "What is this document about?", answer: "A comprehensive study guide extracted from the provided text." }],
-        planner_tasks: [{ task: "Review starting chapters", topic: "Fundamentals", priority: "High" }]
-      }]
-    };
-  }
+    ]
+  };
 }

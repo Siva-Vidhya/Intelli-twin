@@ -16,7 +16,7 @@ interface UploadedFile {
   file_url: string;
   summary?: string;
   created_at: string;
-  status: 'Completed' | 'Processing' | 'AI Analyzing' | 'Failed' | 'Uploading';
+  status: 'Completed' | 'Processing' | 'AI Analyzing' | 'Analyzing' | 'Failed' | 'Uploading';
   progress?: number;
   size?: string;
 }
@@ -121,39 +121,42 @@ export default function UploadPage() {
     else if (e.type === "dragleave") setDragActive(false);
   };
 
-  const handleAnalyze = async (fileUrl: string, dbId: string, tempId?: string) => {
+  const handleAnalyze = async (fileUrl: string, dbId: string, tempId?: string, fileName?: string) => {
     const targetId = tempId || dbId;
     setFiles(prev => prev.map(f => f.id === targetId ? { ...f, status: 'AI Analyzing', progress: 80 } : f));
     
     try {
-      console.log(`[Upload Dashboard] Dispatching Analysis for ID: ${dbId}`);
-      console.log("Running AI Analysis:", fileUrl);
+      console.log(`[Upload Dashboard] Triggering background analysis for ID: ${dbId}`);
       const aiRes = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl, id: dbId })
+        body: JSON.stringify({ 
+          fileId: dbId,
+          fileUrl,
+          fileName: fileName || dbId
+        })
       });
-      if (!aiRes.ok) throw new Error(`Server returned HTTP ${aiRes.status}`);
-      const text = await aiRes.text();
-      console.log("AI RAW RESPONSE:", text);
 
-      let aiResult;
-      try {
-        aiResult = JSON.parse(text);
-      } catch {
-        throw new Error("AI returned invalid JSON");
-      }
+      if (!aiRes.ok) throw new Error(`Analyze trigger returned HTTP ${aiRes.status}`);
+      const aiResult = await aiRes.json().catch(() => ({ success: false }));
 
       if (!aiResult.success) {
-        throw new Error(aiResult.message || aiResult.error || "AI Analysis Failed");
+        throw new Error(aiResult.error || 'Analysis trigger failed');
       }
 
-      const aiData = aiResult.data || {};
-      setFiles(prev => prev.map(f => f.id === targetId ? { ...f, status: 'Completed', progress: 100, summary: aiData.summary || 'Analysis complete' } : f));
+      // Analysis is now running in the background.
+      // Mark as 'Analyzing' — Planner page will update via polling.
+      setFiles(prev => prev.map(f => f.id === targetId 
+        ? { ...f, status: 'Analyzing' as const, progress: 90, summary: 'AI is analyzing your document...' } 
+        : f
+      ));
       fetchMetadata();
     } catch (err: any) {
-      console.error("[Upload Dashboard]: AI Pipeline Recovery Sequence...", err);
-      setFiles(prev => prev.map(f => f.id === targetId ? { ...f, status: 'Failed', progress: 0, summary: `Intelligence Alert: ${err.message}` } : f));
+      console.error("[Upload Dashboard]: Analysis trigger error:", err);
+      setFiles(prev => prev.map(f => f.id === targetId 
+        ? { ...f, status: 'Failed', progress: 0, summary: `Analysis Error: ${err.message}` } 
+        : f
+      ));
     }
   };
 
@@ -208,17 +211,9 @@ export default function UploadPage() {
         throw new Error("Upload succeeded but file URL missing");
       }
 
-      // Update UI state with official database values
-      const { id: dbId, fileUrl } = uploadResult.data;
-      setFiles(prev => prev.map(f => f.id === tempId ? { 
-        ...f, 
-        status: 'Processing', 
-        progress: 60, 
-        file_url: fileUrl 
-      } : f));
-
-      // 2. Trigger Stable AI Analysis
-      await handleAnalyze(fileUrl, dbId, tempId);
+      // 2. Trigger Stable AI Analysis (non-blocking — background worker handles heavy lifting)
+      const { id: dbId, fileUrl, fileName } = uploadResult.data;
+      await handleAnalyze(fileUrl, dbId, tempId, fileName);
 
       clearTimeout(timeout);
 

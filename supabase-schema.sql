@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS uploads (
   file_url    TEXT NOT NULL,
   file_type   TEXT,
   summary     TEXT DEFAULT NULL,
+  status      TEXT DEFAULT 'processing',
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
