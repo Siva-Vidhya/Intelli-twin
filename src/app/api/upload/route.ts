@@ -76,6 +76,10 @@ export async function POST(req: Request) {
       dbData = dbSyncData;
     }
 
+    // Phase 1 — Trace Upload Pipeline
+    console.log("UPLOAD RECEIVED:", publicUrl);
+    console.log("FILE ID:", dbData.id);
+
     // Background trigger removed. The UI handles triggering /api/analyze natively.
 
     return Response.json({ 
